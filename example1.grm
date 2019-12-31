@@ -1,0 +1,51 @@
+#::Example which shows how to utilize OpenGL shaders. Please check other tutorials on how to write shaders as this example only showcases the possibility of using shaders in GraML and not to teach how shaders are written
+#::For now, I'll only write a simple Fragment Shader using the <fshader> tag. To write the vertex shader too, use <vshader> tag.
+
+<GraML>
+	<begin widgets>
+		<widget >
+			id: box;
+			size_hint: None, None;
+			<button>
+				id: btn;
+				text: hello person;
+				pos: 0, 0;
+			</button>
+			<MDTextField>
+				id: inp;
+				pos: 0, 400;
+			</MDTextField>
+			<scatter>id: scatt</scatter>
+			<image> source: "/sdcard/pictures/12668.jpg"; pos: 200, 400;</image>
+		</widget>
+	<end widgets>
+	<script>
+	</script>
+	<graphics useShader=True>
+		#::Always set the default color first.
+		<color value=(.4, .3, .6);/>
+		<fshader source=string> #::To write the shader here instead of in a separate file, set the value of option "source" to "string" else, set the value of option "source" to the location of your fragment shader or your vertex shader
+		#ifdef GL_ES
+			precision highp float;
+		#else
+			precision mediump float;
+		#endif
+		//output from the default vertex shader
+		varying vec4 frag_color;
+		uniform float time;
+		void main(){
+			if (gl_FragCoord.y >= 500.*sin(gl_FragCoord.x)){
+				gl_FragColor = vec4(7., .4, time*10., 1.);
+			}
+			else{ gl_FragColor = frag_color;}
+		}
+		</fshader>
+		<rectangle>
+			pos: 0,0,;
+		#::	size: Window.size;
+			#::uncomment the next line to set a different colour. This different colour would be used for any other drawing made until a different colour is set
+			color: .3, .9, .1;
+		</rectangle>
+	</graphics>
+</GraML>
+			

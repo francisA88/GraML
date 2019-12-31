@@ -1,0 +1,35 @@
+<GraML>
+	<begin widgets>
+		<widget >
+			id: box;
+			size_hint: None, None;
+			<button>
+				id: btn;
+				text: hello person;
+				pos: 0, 0;
+				size: 100, 60;
+			</button>
+			<MDTextField>
+				id: inp;
+				pos: 0, 400;
+			</MDTextField>
+			<image> source: "/sdcard/pictures/12668.jpg"; pos: 200, 400;</image>
+		</widget>
+	<end widgets>
+	<script>
+print(body.ids.box.ids.inp.line_color_focus)
+body.ids.box.ids.inp.line_color_focus= (.5, .9, .3, 1)
+
+	</script>
+	<graphics>
+		#::Always set the default color first.
+		<color value=(.4, .3, .6);/>
+		<rectangle>
+			pos: 0,0,;
+			size: Window.size;
+			#::uncomment the next line to set a different colour. This different colour would be used for any other drawing made until a different colour is set
+		#::	color: .3, .9, .1;
+		</rectangle>
+	</graphics>
+</GraML>
+			

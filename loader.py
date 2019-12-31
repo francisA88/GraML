@@ -1,4 +1,4 @@
-#GraML (Graphics Markup Language)
+#GraML (Graphical Markup Language)
 #version 0.1.
 '''A markup language designed for making graphical user interfaces. It comes with features such a button, widgets, shaders (OpenGL), input, etc.
 #Example:
@@ -26,21 +26,20 @@ import kivy.graphics as graphics
 from kivy.factory import Factory
 from kivy.clock import Clock
 from kivy.animation import Animation	
-##print(dir(graphics))
 from kivy.app import App
 from kivy.lang import Builder
 import re
 import sys
 
-load_config = lambda file:Builder.load_file(file)
-#load_config("config.kv")
 setInterval = lambda callback, interv: Clock.schedule_interval(callback, interv)
- 
+
 def capitalize(string):
 	return string[0].upper()+string[1:]
 
 
 class ParserError(SyntaxError): pass
+class IncompatibleFileTypeError(ValueError): pass
+
 
 class MainUI(Widget):
 	def __init__(self, *args, **kws):
@@ -52,7 +51,6 @@ class WidgetsParser(object):
 	def __init__(self, gramlstring: str):
 		self.gramlstring = gramlstring 
 		self._parse()
-		#self.singularTypes = ["Button", "Image", "Label", ""]
 
 	def _parse(self):
 		widbody = re.search("< *?begin *widgets *?>(.*?)< *end *widgets *?>", self.gramlstring, re.DOTALL)
@@ -105,6 +103,8 @@ class WidgetsParser(object):
 			inline_attr = nesWidgetmatch.group(1)
 			inline_attr = inline_attr.replace(" ","").replace("\n", "").replace("\t","").split(';')
 			expandedInlineAttr = [i.split("=") for i in inline_attr]
+			if [''] in expandedInlineAttr:
+				expandedInlineAttr.remove([''])
 			inlineOptions = dict(expandedInlineAttr)
 			nestedTags = re.findall("<.+?>.*?< */.+?>", nesWidgetmatch.group(2), re.DOTALL)
 			if nestedTags:
@@ -164,21 +164,23 @@ class GraphicsParser(object):
 			self.getOthers()
 			
 	def getColor(self):
-		values = re.search("< *color(.+?)/>", self.graml, re.DOTALL)
-		if values:
-			values= values.group(1)
+		values = re.search("< *color(.*?)/>", self.graml, re.DOTALL)
 		color = (0,0,0,1)
 		mode = "rgb"
-		tokens = [i.split("=") for i in [i for i in values.split(";")]]
-		tokens = dict(tokens)
-		for attr in tokens:
-			#Need to remove unwanted spaces to prevent errors or unwanted behaviours
-			if attr.replace(" ", "") == "value":
-				color = tokens[attr]
-			if attr.replace(" ", "") == "mode":
-				mode = tokens[attr]
-		color = eval(color)
-		body.canvas.add(Color(*color, mode=mode))
+		if values:
+			values= values.group(1)
+			tokens = [i.split("=") for i in [i for i in values.split(";")]]
+			for i in tokens:
+				if i==[""]: tokens.remove(i)
+			tokens = dict(tokens)
+			for attr in tokens:
+				#Need to remove unwanted spaces to prevent errors or unwanted behaviours
+				if attr.replace(" ", "") == "value":
+					color = tokens[attr]
+				if attr.replace(" ", "") == "mode":
+					mode = tokens[attr]
+			color = eval(color)
+			body.canvas.add(Color(*color, mode=mode))
 		#Remove the color tag from self.content
 		self.content = re.search("< *color.*?/>(.*)", self.content, re.DOTALL)
 		if self.content:
@@ -230,10 +232,8 @@ class GraphicsParser(object):
 		
 	def getShader(self, source: str) -> None:
 		'''Gets and applies the canvas's shaders'''
-		#Single out the fragment shader string
-		print(source)
-		fshaderTag = re.search("< *fshader(.*?)>(.*?)< *?/ *fshader *?>", source, re.DOTALL)
-		print("here1: ", fshaderTag)
+		#Search for the fragment shader string
+		fshaderTag = re.search("< *fshader(.*?)>(.*?)< */ *fshader *>", source, re.DOTALL)
 		if fshaderTag:
 			options = fshaderTag.group(1)
 			options = options.split(";")[0] if ";" in options else options.replace(" ","")
@@ -242,10 +242,24 @@ class GraphicsParser(object):
 				if str(parts[1]) == "string":
 					fshaderString = fshaderTag.group(2)
 					body.canvas.shader.fs =fshaderString
+				else:
+					fshaderString = open("".join(i for i in parts[1] if (i not in ("'", '"')))).read()
+					body.canvas.shader.fs = fshaderString
+	#=====#=====#======#
+		#search for the vertex shader string
+		vshaderTag = re.search("< *vshader(.*?)>(.*?)< */ *vshader *>", source, re.DOTALL)
+		if vshaderTag:
+			options = vshaderTag.group(1)
+			options = options.split(";")[0] if ";" in options else options.replace(" ","")
+			parts = options.split("=")
+			if parts[0] == "source":
+				if str(parts[1]) == "string":
+					vshaderString = vshaderTag.group(2)
+					body.canvas.shader.vs =vshaderString
 					#vertex shader   fragment shader
 				else:
-					fshaderString = open(parts[1]).read()
-					body.canvas.shader.fs = fshaderString
+					vshaderString = open("".join(i for i in parts[1] if (i not in ("'", '"')))).read()
+					body.canvas.shader.vs = vshaderString
 
 def parseScript(source):
 	fullContent = re.search("< *?GraML *?>(.+?)< *?/ *GraML.*?>", source, re.DOTALL)
@@ -277,13 +291,15 @@ def parseScript(source):
 			
 			
 body = MainUI()
+
 class Loader(object):
 	@staticmethod
 	def loadFile(source):
-		source = open(source).read()
-		Loader.removeCommentsAndEvaluate(source)
-		return body
-	
+		if source.endswith(".grm"):
+			source = open(source).read()
+			Loader.removeCommentsAndEvaluate(source)
+			return body
+		raise IncompatibleFileTypeError("Files must end with '.grm' extension")
 	@staticmethod
 	def loadString(string):
 		Loader.removeCommentsAndEvaluate(string)
@@ -303,9 +319,8 @@ class Loader(object):
 
 if __name__ == "__main__":
 	class MainApp(App):
-		theme_cls = ThemeManager()
+		theme_cls = ThemeManager() #Needed for kivyMD
 		def build(self):
-			return Loader.loadFile("test.gml")
-			print(body.ids)
+			return Loader.loadFile("example3.grm")
 		
 	MainApp().run()
