@@ -31,7 +31,7 @@
 			</TextInput>
 			<MDTextField>
 				id: textinput;
-				text: "beans";
+				text: this is a text;
 				pos: 200, 600;
 				size: 200, 80;
 			</MDTextField>
@@ -46,7 +46,7 @@
 		</widget>
 		<widget id=yy>
 			<button>
-				text: "[color=#aaaeee][size=20]Text[/size][/color]";
+				text: [color=#aaaeee][size=20]Text[/size][/color];
 				pos: 0,0;
 				markup: True;
 			</button>
@@ -61,9 +61,16 @@
 			pos: 200,0;
 		</button>
 	<end widgets>
-	<script src="script.py">
+	<script>
 print("Blah blah blah")
 print(availableGraphicsTags)
+from itertools import cycle
+
+global values
+values = cycle(range(1,400))
+def p(dt):
+	body.ids.box.ids.textinput.text = str(next(values))
+Clock.schedule_interval(p, .5)
 	</script>
 #::Graphics tag contains all other drawing instructions like rectangle, ellipse, etc.
 	<graphics useShader=False> #::if True, any shader program written appropriately under the graphics tag will be applied

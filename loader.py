@@ -31,11 +31,12 @@ from kivy.lang import Builder
 import re
 import sys
 
+from others import XDict
+
 setInterval = lambda callback, interv: Clock.schedule_interval(callback, interv)
 
 def capitalize(string):
 	return string[0].upper()+string[1:]
-
 
 class ParserError(SyntaxError): pass
 class IncompatibleFileTypeError(ValueError): pass
@@ -60,10 +61,6 @@ class WidgetsParser(object):
 			if all_widget_tags:
 				for groups in all_widget_tags:
 					self.parseWidgetTag(groups)
-			otherTags = re.findall("<(.+)?>.*?</.+?>", widbody.group(1), re.DOTALL)
-			for tag in otherTags:
-				if not re.search("<.*?widget.+?>.+?<.*?/.*?widget.*?>", tag, re.DOTALL):
-					body.add_widget(self.parseNonNested(tag))
 						
 	def parseNonNested(self, string):
 		ptrn = "<(.+?)>(.*?)< *?/(.+?)>"
@@ -80,18 +77,21 @@ class WidgetsParser(object):
 						s = re.search(" *?'(.+?)' *", split2[i][1], re.DOTALL)
 						if s:
 							split2[i][1] = s.group(1)
+						continue
 					else:
 						split2[i][0] = split2[i][0].replace(" ","").replace("\n","").replace("\t", "")
 						split2[i][1] = split2[i][1].replace(" ","").replace("\n","").replace("\t", "")
 						split2[i][1] = eval(split2[i][1])
-				except:
+				except Exception as e:
+					print(repr(e), file = sys.stderr)
 					split2[i][1] = str(split2[i][1])
 			attr = dict(split2)
 			tag = capitalize(match.group(1).replace(" ","").replace("\n","").replace("\t",""))
 			klass = eval("Factory."+tag)
 			if tag == capitalize(match.group(3).replace(" ","").replace("\n","").replace("\t","")):
 				return klass(**attr)
-			else: return 0
+			else:
+				return 0
 			
 	def parseWidgetTag(self, widgetTag):
 		#I need the pattern to match whitespaces within tags too.					
@@ -115,13 +115,14 @@ class WidgetsParser(object):
 				if "" in explicitOptions:
 					explicitOptions.remove("")
 			else:
-				explicitOptions = match.group(2).replace("\n","").replace(" ","").replace("\t","").split(";")
+				explicitOptions = nesWidgetmatch.group(2).replace("\n","").replace(" ","").replace("\t","").split(";")
 			opts = [i.split(":") for i in explicitOptions]
 			for i in range(len(opts)):
 				try:
 					opts[i][1] = eval(opts[i][1])
 				except:
 					pass
+			if opts == [[""]]: return
 			explicitOpts = dict(opts)
 			options = inlineOptions
 			options.update(explicitOpts)
@@ -209,6 +210,9 @@ class GraphicsParser(object):
 						Class = eval("%s"%capitalize(tag))
 						ch = Class(**attrs)
 						body.canvas.add(ch)
+						if "id" in attrs:
+							graphicsIds.update({attrs["id"].replace(" ",""):ch})
+							print(graphicsIds)
 					
 	def breakTokens(self, string) -> dict:
 		'''Returns a dict of attributes and values within a particular tag'''
@@ -291,6 +295,7 @@ def parseScript(source):
 			
 			
 body = MainUI()
+graphicsIds = XDict()
 
 class Loader(object):
 	@staticmethod
