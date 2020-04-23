@@ -1,0 +1,24 @@
+<GraML>
+	<Script>
+global stop
+def stop():
+	exit()
+window.clearcolor = 1,1,1,1
+	</Script>
+	<Body size_hint="[None,None]"><Button on_press="stop"/><Button pos="0,97"/></Body>
+	<Canvas>
+		<Rectangle>
+			pos: [200,200];
+		</Rectangle>
+	</Canvas>
+	<Shader>
+		<Fragment>
+			precision mediump float;
+			void main(){
+				float y = gl_FragCoord.y;
+				gl_FragColor = vec4(y/200., .8,.3,1.);
+			}
+		</Fragment>
+	</Shader>
+	<Script>print("hqkskkwak")</Script>
+</GraML>

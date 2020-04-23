@@ -1,331 +1,184 @@
-#GraML (Graphical Markup Language)
-#version 0.1.
-'''A markup language designed for making graphical user interfaces. It comes with features such a button, widgets, shaders (OpenGL), input, etc.
-#Example:
-==========
-	<GraML>
-		#$This is a comment
-		<begin widgets>
-			<button>
-				text: "An example showcase";
-			</button>
-		<end widgets>
-	</GraML>
+from xml.etree.ElementTree import ElementTree as ET
 
-This will produce a button with text "An example showcase" at the bottom left of the screen.'''
-
-import kivy
-import kivymd
-from kivymd.theming import ThemeManager
-from kivy.uix.widget import Widget
-from kivy.uix.button import Button
-from kivy.uix.label import Label
-from kivy.core.window import Window
-from kivy.graphics import *
-import kivy.graphics as graphics
 from kivy.factory import Factory
-from kivy.clock import Clock
-from kivy.animation import Animation	
+from kivy.base import runTouchApp
 from kivy.app import App
 from kivy.lang import Builder
+from kivy.graphics import *
+from kivy.core.window import Window as window
+from kivy.clock import Clock
+
 import re
 import sys
+import os
 
-from others import XDict
+class UnknownTagError(Exception):pass
+class InvalidStartError(Exception):pass
+class InvalidFileError(ValueError): pass
 
-setInterval = lambda callback, interv: Clock.schedule_interval(callback, interv)
-
-def capitalize(string):
-	return string[0].upper()+string[1:]
-
-class ParserError(SyntaxError): pass
-class IncompatibleFileTypeError(ValueError): pass
-
-
-class MainUI(Widget):
-	def __init__(self, *args, **kws):
-		super().__init__(*args, **kws)
-		self.size = Window.size
-		self.size_hint = None, None
+Builder.load_string('<Body@FloatLayout>:')
 		
-class WidgetsParser(object):
-	def __init__(self, gramlstring: str):
-		self.gramlstring = gramlstring 
-		self._parse()
-
-	def _parse(self):
-		widbody = re.search("< *?begin *widgets *?>(.*?)< *end *widgets *?>", self.gramlstring, re.DOTALL)
-		if widbody:
-			self.widgetBody = widbody.group(1)
-			all_widget_tags = re.findall("<.*?widget.+?>.+?<.*?/.*?widget.*?>", self.widgetBody, re.DOTALL)
-			if all_widget_tags:
-				for groups in all_widget_tags:
-					self.parseWidgetTag(groups)
-						
-	def parseNonNested(self, string):
-		ptrn = "<(.+?)>(.*?)< *?/(.+?)>"
-		match = re.search(ptrn, string, re.DOTALL)
-		if match:
-			split1 = match.group(2).split(";")
-			split2 = [i.split(":") for i in split1]
-			if split2[-1][0].replace(" ","").replace("\n","").replace("\t","") == "":
-				split2.remove(split2[-1])
-			for i in range(len(split2)):
-				try:
-					if "text" in split2[i][0]:
-						split2[i][0] = "text"
-						s = re.search(" *?'(.+?)' *", split2[i][1], re.DOTALL)
-						if s:
-							split2[i][1] = s.group(1)
-						continue
-					else:
-						split2[i][0] = split2[i][0].replace(" ","").replace("\n","").replace("\t", "")
-						split2[i][1] = split2[i][1].replace(" ","").replace("\n","").replace("\t", "")
-						split2[i][1] = eval(split2[i][1])
-				except Exception as e:
-					print(repr(e), file = sys.stderr)
-					split2[i][1] = str(split2[i][1])
-			attr = dict(split2)
-			tag = capitalize(match.group(1).replace(" ","").replace("\n","").replace("\t",""))
-			klass = eval("Factory."+tag)
-			if tag == capitalize(match.group(3).replace(" ","").replace("\n","").replace("\t","")):
-				return klass(**attr)
-			else:
-				return 0
-			
-	def parseWidgetTag(self, widgetTag):
-		#I need the pattern to match whitespaces within tags too.					
-		ptrn = "< *widget(.*?)>(.*?)< *?/ *widget *?>"
-		ptrn2 = "<(.+?)>(.*?)< *?/(.+?)>"
-		nesWidgetmatch = re.search(ptrn, widgetTag, re.DOTALL)
-		options ={}
-		if nesWidgetmatch:
-			inline_attr = nesWidgetmatch.group(1)
-			inline_attr = inline_attr.replace(" ","").replace("\n", "").replace("\t","").split(';')
-			expandedInlineAttr = [i.split("=") for i in inline_attr]
-			if [''] in expandedInlineAttr:
-				expandedInlineAttr.remove([''])
-			inlineOptions = dict(expandedInlineAttr)
-			nestedTags = re.findall("<.+?>.*?< */.+?>", nesWidgetmatch.group(2), re.DOTALL)
-			if nestedTags:
-				explicitOptions = nesWidgetmatch.group(2)
-				for i in nestedTags:
-					explicitOptions = explicitOptions.replace(i, "")
-				explicitOptions = explicitOptions.replace("\n","").replace(" ","").replace("\t","").split(";")
-				if "" in explicitOptions:
-					explicitOptions.remove("")
-			else:
-				explicitOptions = nesWidgetmatch.group(2).replace("\n","").replace(" ","").replace("\t","").split(";")
-			opts = [i.split(":") for i in explicitOptions]
-			for i in range(len(opts)):
-				try:
-					opts[i][1] = eval(opts[i][1])
-				except:
-					pass
-			if opts == [[""]]: return
-			explicitOpts = dict(opts)
-			options = inlineOptions
-			options.update(explicitOpts)
-			parwid = Widget(**options)
-			if "id" in options:
-				body.ids[options["id"]] = parwid
-			for tags in nestedTags:
-				m1=re.match(ptrn, tags, re.DOTALL)
-				m2=re.match(ptrn2, tags, re.DOTALL)
-				if (m1 and m2) or m1:
-					self.parseWidgetTag(tags)
-				elif m2 and not m1:
-					child = self.parseNonNested(tags)
-					if child:
-						parwid.add_widget(child)
-						try:
-							parwid.ids[child.id] = child
-						except AttributeError: pass
-			body.add_widget(parwid)
-			
-##################################
-class GraphicsParser(object):
-	def __init__(self, gramlstring: str):
-		self.graml = gramlstring
-		self.parseGraphicsTree()
-		
-	def parseGraphicsTree(self):
-		content = re.search("< *graphics(.*?)>(.*)< */ *graphics>", self.graml, re.DOTALL)
-		if content:
-			self.content = content.group(2)
-			option = content.group(1).replace(" ","").split("=")
-			if option[0] == "useShader" and eval(option[1]):
-				body.canvas = RenderContext(
-					use_parent_modelview = True,
-					use_parent_projection = True
-					)
-				self.getShader(self.graml)
-			else: body.canvas = Canvas()
-			self.getColor()
-			self.getOthers()
-			
-	def getColor(self):
-		values = re.search("< *color(.*?)/>", self.graml, re.DOTALL)
-		color = (0,0,0,1)
-		mode = "rgb"
-		if values:
-			values= values.group(1)
-			tokens = [i.split("=") for i in [i for i in values.split(";")]]
-			for i in tokens:
-				if i==[""]: tokens.remove(i)
-			tokens = dict(tokens)
-			for attr in tokens:
-				#Need to remove unwanted spaces to prevent errors or unwanted behaviours
-				if attr.replace(" ", "") == "value":
-					color = tokens[attr]
-				if attr.replace(" ", "") == "mode":
-					mode = tokens[attr]
-			color = eval(color)
-			body.canvas.add(Color(*color, mode=mode))
-		#Remove the color tag from self.content
-		self.content = re.search("< *color.*?/>(.*)", self.content, re.DOTALL)
-		if self.content:
-			self.content = self.content.group(1)
-			
-	def getOthers(self):
-		'''Function to parse and add other graphics instructions like Line, Rectangle, Quad, etc.'''
-		notUsed = ["Fbo", "RenderContext", "Canvas", "Callback", "GraphicException"]+[i for i in dir(graphics) if i.startswith("_") or i[0].islower()]
-		#global here is not really necessary for the program to be successful, but was added here for users to be able to reference the available tags for use.
-		global availableGraphicsTags
-		#
-		availableGraphicsTags = [i for i in dir(graphics) if i not in notUsed]
-		if self.content:
-			'''First get a list of tags accordingly as they are in the markup and then add them accordingly'''
-			#I only need to find the beginning tags
-			for group in re.findall("<.+?>.*?< */.+?>", self.content, re.DOTALL):
-				match = re.search("<(.+?)>(.*?)<", group, re.DOTALL)
-				if match:
-					fullcontent = match.group().replace("\n","").replace(" ","")
-					subContent = match.group(2)
-					tag = match.group(1).replace(" ","")
-					if capitalize(tag) in availableGraphicsTags:
-						attrs = self.breakTokens(subContent)
-						if "color" in attrs:
-							body.canvas.add(Color(*attrs["color"]))
-						Class = eval("%s"%capitalize(tag))
-						ch = Class(**attrs)
-						body.canvas.add(ch)
-						if "id" in attrs:
-							graphicsIds.update({attrs["id"].replace(" ",""):ch})
-							print(graphicsIds)
-					
-	def breakTokens(self, string) -> dict:
-		'''Returns a dict of attributes and values within a particular tag'''
-		tokens = string.split(";")
-		for part in tokens:
-			#I need to raise this error now to prevent further errors due to the tokens not being split properly
-			if ":" not in part: raise ParserError
-			parsed = [i.replace("\n","").replace("\t","").split(":") for i in tokens]
-			#Well, for some reason I need this line.
-			parsed.remove([""])
-			output = dict(parsed)
-			for prop in output: #property in output
-				try:
-					output[prop] = eval(output[prop])
-				except NameError:
-					output[prop] = str(output[prop])
-				except:
-					output[prop] = {}
-			return output
-		else: return {}
-		
-	def getShader(self, source: str) -> None:
-		'''Gets and applies the canvas's shaders'''
-		#Search for the fragment shader string
-		fshaderTag = re.search("< *fshader(.*?)>(.*?)< */ *fshader *>", source, re.DOTALL)
-		if fshaderTag:
-			options = fshaderTag.group(1)
-			options = options.split(";")[0] if ";" in options else options.replace(" ","")
-			parts = options.split("=")
-			if parts[0] == "source":
-				if str(parts[1]) == "string":
-					fshaderString = fshaderTag.group(2)
-					body.canvas.shader.fs =fshaderString
-				else:
-					fshaderString = open("".join(i for i in parts[1] if (i not in ("'", '"')))).read()
-					body.canvas.shader.fs = fshaderString
-	#=====#=====#======#
-		#search for the vertex shader string
-		vshaderTag = re.search("< *vshader(.*?)>(.*?)< */ *vshader *>", source, re.DOTALL)
-		if vshaderTag:
-			options = vshaderTag.group(1)
-			options = options.split(";")[0] if ";" in options else options.replace(" ","")
-			parts = options.split("=")
-			if parts[0] == "source":
-				if str(parts[1]) == "string":
-					vshaderString = vshaderTag.group(2)
-					body.canvas.shader.vs =vshaderString
-					#vertex shader   fragment shader
-				else:
-					vshaderString = open("".join(i for i in parts[1] if (i not in ("'", '"')))).read()
-					body.canvas.shader.vs = vshaderString
-
-def parseScript(source):
-	fullContent = re.search("< *?GraML *?>(.+?)< *?/ *GraML.*?>", source, re.DOTALL)
-	if fullContent:
-		sc = fullContent.group(1)
-		sc = re.search("< *script(.*?)>(.*?)< */ *script *?>", sc, re.DOTALL)
-		if sc:
-		#For almost every tag that i evaluate I must take into consideration spaces, tabs, and newlines to increase flexibility of the markup language.
-			sourcelink = sc.group(1).replace("\t","").replace("\n","").replace(" ","")
-			if sourcelink != "" and "=" not in sourcelink:
-				raise ParserError("Invalid statement in script tag")
-			if "=" in sourcelink:
-				source_attr = sourcelink.split("=")[0]
-				link = sourcelink.split("=")[1]
-				if source_attr != "src": return
-				if link != "":
-					try:
-						exec(open("".join(i for i in link if (i not in ("'", '"')))).read())
-					except Exception as error:
-						print(error, file=sys.stderr)
-			script = sc.group(2)
-			if script.replace(" ","").replace("\t","").replace("\n","") == "":
-				return
-			else:
-				try:
-					exec(script)
-				except Exception as error:
-					print(error, file=sys.stderr)
-			
-			
-body = MainUI()
-graphicsIds = XDict()
-
 class Loader(object):
-	@staticmethod
-	def loadFile(source):
-		if source.endswith(".grm"):
-			source = open(source).read()
-			Loader.removeCommentsAndEvaluate(source)
-			return body
-		raise IncompatibleFileTypeError("Files must end with '.grm' extension")
-	@staticmethod
-	def loadString(string):
-		Loader.removeCommentsAndEvaluate(string)
-		return body
+	def __init__(self, source:str, use_md=False): #set use_md to True to enable kivymd usage
+		et = ET(file=source)
+		if et.getroot().tag != "GraML":
+			raise InvalidStartError("Missing tag 'GraML'")
+		if os.path.splitext(source)[1] not in [".xml",".graml"]:
+			raise InvalidFileError("Source file could be an invalid file type")
+		self.loaded = False
+		global space; space=self
+		self.lroot = et.getroot()
+		self.root = self.lroot.find("Body")
+		self.shader = self.lroot.find("Shader")
+		self.canvas = self.lroot.find("Canvas")
+		self.pyscript = self.lroot.find("Script")
+		if use_md:
+			import kivymd
+			from kivymd.app import MDApp as App
+		self.body = self.retrieve_parent(self.root)
+		#Try to get which one comes first, Script or Body?
+		children = et.getroot().getchildren()
+		k =[]
+		maps = {
+			"Script": self.executeScript,
+			"Body": (lambda: self.handle_children(self.root, self.body))
+		}
+		bodytags = 0
+		for ch in children:
+			#k.append([ch,ch.tag])
+			if bodytags ==2 and ch.tag =="Body":
+				continue
+			else: k.append([ch, ch.tag])
+			bodytags+=1
+		for i in k:
+			if i[1] == "Script":
+				#self.pyscript = i[0]
+				maps[i[1]](i[0], i[0].text)
+			elif i[1] == "Body":
+				maps[i[1]]()
 		
-	@staticmethod
-	def removeCommentsAndEvaluate(source):
-		'''Any line that starts with #:: will be treated as a comment and be exempted from further evaluation'''
-		allComments = re.findall("#::.*", source)
-		for comments in allComments:
-			#Removing all comments in the code to prevent them interfering with the parsing.
-			source = source.replace(comments, "")
-		#Ok, now I am done removing comments. Do others now.
-		GraphicsParser(source)
-		WidgetsParser(source)
-		parseScript(source)
+		#if there is no body, then there is no widget to which the shader is applied
+		#if self.body != None:
+		self.handle_shader()
+		self.handle_canvas()
+		
+	def handle_children(self, parenttag, parent_wid):
+		'''Method to add all children to the Body'''
+		if self.body == None: return
+		for child in parenttag.getchildren():
+			wid_child = eval("Factory.%s"%child.tag)()
+			
+			opts = child.items()+self.get_opts_from_text(child.text if child.text!=None else "")
+			for op in opts:
+				if op[0].startswith("on_"):
+					setattr(wid_child, op[0],eval(op[1]))
+					continue
+				try:
+					setattr(wid_child, op[0], op[1])
+				except ValueError:
+					try:
+						setattr(wid_child, op[0], eval(op[1]))
+					except Exception as real_error:
+						print("Invalid option attribute value in tag %s"%child.tag, file=sys.stderr)
+			parent_wid.add_widget(wid_child)
+			self.handle_children(child, wid_child)
+			self.loaded = True
+		
+	def get_opts_from_text(self, text):
+		options = re.findall("([a-zA-Z]+[0-9]*?):(.*?);", text, re.DOTALL)
+		options = list(map(list, options))
+		for i in range(len(options)):
+			options[i][1] = options[i][1].lstrip().rstrip()
+		options = list(map(tuple, options))
+		return options
+		
+	def retrieve_parent(self, parenttag):
+		'''Get a widget as parent from a single tag. Doesn't handle its children'''
+		if parenttag ==None: return None
+		parent = eval("Factory.%s"%parenttag.tag)()
+		for opts in parenttag.items():
+			try:
+				setattr(parent, opts[0], opts[1])
+			except ValueError:
+				setattr(parent, opts[0], eval(opts[1]))
+		return parent
+		
+	def handle_shader(self):
+		if not self.shader: return
+		if self.shader.text.replace(" ","") =="":
+			return
+		canv = RenderContext(
+			use_parent_projection=True,
+			use_parent_modelview=True)
+		if self.body: self.body.canvas = canv
+		else: window.canvas = canv
+		self.vs = self.shader.find("Vertex")
+		self.fs = self.shader.find("Fragment")
+		if self.vs is not None:
+			if self.vs.text.strip():
+				canv.shader.vs = self.vs.text
+			for opt in self.vs.items():
+				if opt[0]=="src" or opt[0]=="source":
+					try:
+						canv.shader.vs = canv.shader.vs.join(open(opt[1]).read())
+					except Exception as error:
+						print(repr(error), file=sys.stderr)
+		if self.fs is not None:
+			if self.fs.text.strip():
+				canv.shader.fs = self.fs.text
+			for opt in self.fs.items():
+				if opt[0]=="src" or opt[0]=="source":
+					try:
+						canv.shader.fs =canv.shader.fs.join(open(opt[1]).read())
+					except Exception as error:
+						print(repr(error), file=sys.stderr)
+					
+	def handle_canvas(self):
+		#Handle the Canvas tag and instructions.
+		'''Note: The XML or GraML file expects only one Canvas tag'''
+		if not self.canvas: return
+		for instruction in self.canvas.getchildren():
+			klass = eval(instruction.tag)()
+			text = instruction.text
+			for opt in instruction.items()+self.get_opts_from_text(text if text!=None else ""):
+				try:
+					setattr(klass, opt[0], opt[1])
+				except (ValueError, TypeError) as e:
+					try:
+						setattr(klass, opt[0], eval(opt[1]))
+					except Exception as real_error:
+						print("Invalid option attribute value in tag %s"%instruction.tag, file=sys.stderr)
+			if self.body:
+				self.body.canvas.add(klass)
+			else:
+				window.canvas.add(klass)
+				
+	def executeScript(self, sTag, script):
+		for opt in sTag.items():
+			if opt[0] in ["src", "source"]:
+				exec(open(opt[1]).read())
+		exec(script)
+	
+	def onBodyLoaded(self, callback):
+		#Event listener for when all Body widgets are fully loaded
+		def func(dt):
+			while True:
+				if self.loaded:
+					callback()
+					break
+					ev.cancel()
+		ev = Clock.schedule_once(func, .0001)
+		
+	def run(self):
+		'''Use this method only if you do not wish to customize your subclass of App.'''
+		class AppInstance(App):
+			def build(other):
+				return self.body
+		AppInstance().run()
 
-if __name__ == "__main__":
-	class MainApp(App):
-		theme_cls = ThemeManager() #Needed for kivyMD
-		def build(self):
-			return Loader.loadFile("example3.grm")
-		
-	MainApp().run()
+def defineAlias(name, type="Widget"):
+	Builder.load_string("<{0}@{1}>:".format(name, type))
+	
+if __name__ == '__main__':
+	loader = Loader("example.xml", 0)
+	loader.run()
