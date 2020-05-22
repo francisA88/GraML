@@ -2,6 +2,7 @@
 Graphical Markup Language.
 A markup language made specifically for making graphical user interfaces.
 It is intended to simplify making GUIs being written in Python itself using Kivy library.
+It's basically an XML file with added features
 
 To run the example "example.graml", run loader.py.
 Other examples can be loaded by changing the file name in loader.py to the example file name.
